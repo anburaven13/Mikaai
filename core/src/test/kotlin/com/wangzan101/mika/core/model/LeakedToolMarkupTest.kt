@@ -57,6 +57,17 @@ class LeakedToolMarkupTest {
         assertFalse(scan.text.contains("DSML"))
     }
 
+    @Test fun recoversMikaApiLeakedCall() {
+        val text = "com.mika.api:run_command{command:curl -s \"https://wttr.in/Durgapur?format=j1\",reason:Fetch weather data for Durgapur}"
+        val scan = LeakedToolMarkup.scan(text)
+        assertEquals(1, scan.calls.size)
+        assertEquals("run_command", scan.calls[0].name)
+        val args = Json.parseToJsonElement(scan.calls[0].argsJson).jsonObject
+        assertEquals("curl -s \"https://wttr.in/Durgapur?format=j1\"", args["command"]!!.jsonPrimitive.content)
+        assertEquals("Fetch weather data for Durgapur", args["reason"]!!.jsonPrimitive.content)
+        assertEquals("", scan.text)
+    }
+
     @Test fun recoversJsonToolCallBlock() {
         val text = "<tool_call>\n{\"name\":\"phone_tap\",\"arguments\":{\"ref\":\"a1\"}}\n</tool_call>"
         val scan = LeakedToolMarkup.scan(text)

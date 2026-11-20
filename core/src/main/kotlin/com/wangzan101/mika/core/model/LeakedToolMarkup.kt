@@ -58,7 +58,43 @@ object LeakedToolMarkup {
         RegexOption.DOT_MATCHES_ALL,
     )
 
+    private val MIKA_API_BLOCK = Regex(
+        "(?:com\\.mika\\.api:|mika:)([a-zA-Z0-9_]+)\\s*\\{([^}]*)\\}",
+        RegexOption.DOT_MATCHES_ALL
+    )
+    private val MIKA_PARAM_PAIR = Regex(
+        "([a-zA-Z0-9_]+)\\s*:\\s*(.*?)(?=(?:,\\s*[a-zA-Z0-9_]+\\s*:|$))",
+        RegexOption.DOT_MATCHES_ALL
+    )
+
     private val json = Json { ignoreUnknownKeys = true }
+
+    private fun extractMikaApiBlocks(text: String, calls: MutableList<Invocation>): String {
+        if (!text.contains("com.mika.api:") && !text.contains("mika:")) return text
+        return MIKA_API_BLOCK.replace(text) { m ->
+            val name = m.groupValues[1].trim()
+            val rawParams = m.groupValues[2].trim()
+            if (name.isEmpty()) return@replace m.value
+            val argsJson = try {
+                val candidate = if (rawParams.startsWith("{") && rawParams.endsWith("}")) rawParams else "{$rawParams}"
+                json.parseToJsonElement(candidate).jsonObject.toString()
+            } catch (e: Exception) {
+                buildJsonObject {
+                    for (pm in MIKA_PARAM_PAIR.findAll(rawParams)) {
+                        val k = pm.groupValues[1].trim()
+                        var v = pm.groupValues[2].trim()
+                        if (v.startsWith("\"") && v.endsWith("\"") && v.length >= 2) {
+                            v = v.substring(1, v.length - 1).replace("\\\"", "\"")
+                        }
+                        put(k, JsonPrimitive(v))
+                    }
+                }.toString()
+            }
+            calls += Invocation(name, argsJson)
+            " "
+        }
+    }
+
 
     /**
      * 流式里常见:标记刚开了个头(`<｜`、`<｜｜DSML`、`<｜｜DSML｜｜ invoke name="pho`)。
@@ -89,6 +125,7 @@ object LeakedToolMarkup {
         // 2. <tool_call>{…}</tool_call>(里面是 JSON,可能是一个对象或一组)
         rest = extractJsonBlocks(rest, TOOL_CALL_BLOCK, calls)
         rest = extractJsonBlocks(rest, PIPE_TOOL_CALL_BLOCK, calls)
+        rest = extractMikaApiBlocks(rest, calls)
 
         // 流式预览:末尾还没收全的半个标记(<｜｜DSML｜、<｜…)也别显示出来
         val lt = rest.lastIndexOf('<')

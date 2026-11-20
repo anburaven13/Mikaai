@@ -58,12 +58,12 @@ class GeminiModel(
             val nextKey = resolveKey()
             if (nextKey != key) {
                 val (s2, r2, t2) = HttpSupport.execute(http, request(system, messages, tools, stream = false, key = nextKey))
-                if (s2 in 200..299) return parse(t2)
+                if (s2 in 200..299) return LeakedToolMarkup.repair(parse(t2))
                 if (s2 !in 200..299) throw mapError(s2, r2, t2)
             }
         }
         if (status !in 200..299) throw mapError(status, retryAfter, text)
-        return parse(text)
+        return LeakedToolMarkup.repair(parse(text))
     }
 
     override suspend fun completeStreaming(
@@ -79,19 +79,19 @@ class GeminiModel(
                 val stream2 = GeminiStream(onText, ::parse, ::parseUsage)
                 val (s2, r2, t2) = HttpSupport.stream(http, request(system, messages, tools, stream = true, key = nextKey), stream2::accept)
                 if (s2 in 200..299) {
-                    if (t2.isNotEmpty()) return parse(t2).also { reply ->
+                    if (t2.isNotEmpty()) return LeakedToolMarkup.repair(parse(t2)).also { reply ->
                         reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
                     }
-                    return stream2.finish()
+                    return LeakedToolMarkup.repair(stream2.finish())
                 }
                 if (s2 !in 200..299) throw mapError(s2, r2, t2)
             }
         }
         if (status !in 200..299) throw mapError(status, retryAfter, text)
-        if (text.isNotEmpty()) return parse(text).also { reply ->
+        if (text.isNotEmpty()) return LeakedToolMarkup.repair(parse(text)).also { reply ->
             reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
         }
-        return stream.finish()
+        return LeakedToolMarkup.repair(stream.finish())
     }
 
     private suspend fun request(system: String, messages: List<Message>, tools: List<ToolSpec>, stream: Boolean, key: String = resolveKey()): Request {

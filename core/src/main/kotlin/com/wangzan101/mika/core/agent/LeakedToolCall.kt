@@ -15,6 +15,7 @@ internal object LeakedToolCall {
         "[TOOL_CALLS]",
         "<｜tool▁calls▁begin｜>", "<｜tool▁call▁begin｜>",
         "<|tool_calls_section_begin|>", "<|tool_call_begin|>",
+        "com.mika.api:", "mika:",
     )
 
     /**
