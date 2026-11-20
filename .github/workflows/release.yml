@@ -1,0 +1,161 @@
+name: Build & Release Signed APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: "Custom version tag (optional, e.g. v1.0.1. Defaults to v<versionName>.<run_number>)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build Signed APK & Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-provider: basic
+
+      - name: Determine Version & Extract Changelog
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          # 1. Extract base version from app/build.gradle.kts
+          BASE_VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || echo "1.0.0")
+          
+          # 2. Compute dynamic tag that increments every run
+          INPUT_TAG="${{ github.event.inputs.custom_tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG_NAME="$INPUT_TAG"
+          else
+            TAG_NAME="v${BASE_VERSION}.${{ github.run_number }}"
+          fi
+          
+          # 3. Extract the commit message (Changelog is the commit name/message)
+          COMMIT_TITLE=$(git log -1 --pretty=format:"%s")
+          COMMIT_BODY=$(git log -1 --pretty=format:"%b")
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+          echo "COMMIT_TITLE=$COMMIT_TITLE" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
+          
+          # 4. Generate structured Changelog markdown
+          cat <<EOF > release_notes.md
+          ## 📝 Changelog
+          **${COMMIT_TITLE}**
+
+          ${COMMIT_BODY}
+
+          ---
+          * **Version Tag:** \`${TAG_NAME}\`
+          * **Commit:** \`${SHORT_SHA}\`
+          * **Branch:** \`${{ github.ref_name }}\`
+          EOF
+          
+          cat release_notes.md
+
+      - name: Build Release APKs
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Prepare Keystore & Sign APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          mkdir -p dist
+
+          # Set up Signing Keystore (uses GitHub secrets if set, otherwise auto-generates release key)
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Using release keystore provided in GitHub Secrets..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+            STORE_PASS="${{ secrets.KEYSTORE_PASSWORD }}"
+            KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
+            KEY_PASS="${{ secrets.KEY_PASSWORD }}"
+          else
+            echo "No custom keystore found in Secrets. Generating dedicated release keystore..."
+            STORE_PASS="mika_release_pass"
+            KEY_ALIAS="mika_key"
+            KEY_PASS="mika_release_pass"
+            keytool -genkeypair -v \
+              -keystore release.keystore \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$STORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -dname "CN=Mika, OU=Mobile, O=MikaAI, L=SanFrancisco, ST=CA, C=US"
+          fi
+
+          # Align and sign each generated APK
+          for apk in app/build/outputs/apk/release/*.apk; do
+            [ -f "$apk" ] || continue
+            file_name=$(basename "$apk" .apk)
+            clean_name=$(echo "$file_name" | sed 's/-unsigned//g' | sed 's/^app-//g')
+            aligned_apk="${file_name}-aligned.apk"
+            signed_apk="dist/Mika-${TAG_NAME}-${clean_name}.apk"
+
+            echo "==> Aligning $apk..."
+            "$BUILD_TOOLS/zipalign" -p -f 4 "$apk" "$aligned_apk"
+
+            echo "==> Signing $signed_apk..."
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks release.keystore \
+              --ks-pass "pass:$STORE_PASS" \
+              --key-pass "pass:$KEY_PASS" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --out "$signed_apk" \
+              "$aligned_apk"
+
+            echo "==> Verifying signature..."
+            "$BUILD_TOOLS/apksigner" verify --verbose "$signed_apk"
+          done
+
+          # Generate Checksums
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+
+      - name: Create GitHub Release & Upload APKs
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Publishing release $TAG_NAME with title: $COMMIT_TITLE"
+          gh release create "$TAG_NAME" dist/* \
+            --title "$COMMIT_TITLE" \
+            --notes-file release_notes.md
