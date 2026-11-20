@@ -91,9 +91,6 @@ jobs:
         run: |
           ./gradlew :app:assembleRelease \
             -x test \
-            -x lint \
-            -x lintVitalAnalyzeRelease \
-            -x lintVitalReportRelease \
             --parallel \
             --build-cache \
             --stacktrace

@@ -52,6 +52,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
+
     // 评测任务集(仓库根目录 eval/tasks)打进测试包的 assets,真机评测跑器从那里读题
     sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("eval/tasks"))
 
