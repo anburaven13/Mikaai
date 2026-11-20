@@ -16,7 +16,7 @@ class ModelErrorReasonTest {
 
     @Test fun modelNotFoundNamesTheModel() {
         assertEquals(
-            "Model \"gemini\" does not exist at this provider. Check the model name in Settings › Model (enter the full model ID, e.g. gemini-flash-latest) or switch to a preset.",
+            "Model 'gemini' does not exist at this provider. Check the model name in Settings › Model (enter the full model ID, e.g. gemini-flash-latest) or switch to a preset.",
             StopRules.modelFailed(ModelError.ModelNotFound("gemini")).reason,
         )
         assertEquals("Model not found. Please check the model name and Base URL in Settings › Model.", StopRules.modelFailed(ModelError.ModelNotFound()).reason)
@@ -25,7 +25,7 @@ class ModelErrorReasonTest {
 
     @Test fun modelNotFoundCarriesWhatTheServerSaid() {
         assertEquals(
-            "When calling model \"group/rpa\", server responded: none of group/rpa's models is ready. The model name may be incorrect or the service is temporarily unavailable. " +
+            "When calling model 'group/rpa', server responded: none of group/rpa's models is ready. The model name may be incorrect or the service is temporarily unavailable. " +
                 "Check the model name in Settings › Model (enter the full model ID, e.g. gemini-flash-latest) or switch to a preset.",
             StopRules.modelFailed(ModelError.ModelNotFound("group/rpa", "none of group/rpa's models is ready")).reason,
         )
@@ -52,11 +52,11 @@ class ModelErrorReasonTest {
 
     @Test fun modelNotAvailableNamesTheModel() {
         assertEquals(
-            "Account is not authorized or activated for model \"qwen-max\". Switch models in Settings › Model or activate it in your provider dashboard.",
+            "Account is not authorized or activated for model 'qwen-max'. Switch models in Settings › Model or activate it in your provider dashboard.",
             StopRules.modelFailed(ModelError.ModelNotAvailable("qwen-max", "not activated")).reason,
         )
         assertEquals(
-            "Model \"gemma\" does not support tool calling. Mika requires tool support. Switch to a model with tool calling in Settings › Model.",
+            "Model 'gemma' does not support tool calling. Mika requires tool support. Switch to a model with tool calling in Settings › Model.",
             StopRules.modelFailed(ModelError.ToolsUnsupported("gemma")).reason,
         )
     }
@@ -74,8 +74,8 @@ class ModelErrorReasonTest {
         val e = ModelError.ChainFailed(primary, listOf("inferx-main" to primary, "gemini-backup" to ModelError.Server(400)))
         val reason = StopRules.modelFailed(e).reason
         assertTrue(reason.startsWith(userReason(primary)))
-        assertTrue(reason.contains("\"inferx-main\" HTTP 429"))
-        assertTrue(reason.contains("\"gemini-backup\" HTTP 400"))
+        assertTrue(reason.contains("'inferx-main' HTTP 429"))
+        assertTrue(reason.contains("'gemini-backup' HTTP 400"))
     }
 
     @Test fun streamCutIsNotBlamedOnConfiguration() {

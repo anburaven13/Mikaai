@@ -62,23 +62,23 @@ internal fun userReason(e: ModelError): String = when (e) {
     is ModelError.QuotaExceeded -> "Model account quota exceeded. Please check your account balance or plan."
     is ModelError.TaskBudgetExceeded -> "Task token budget limit reached (${e.limit} tokens). Task incomplete."
     is ModelError.DailyBudgetExceeded ->
-        "Daily token budget limit (${e.limit} tokens) reached for provider "${e.providerName}". Recovers automatically tomorrow."
+        "Daily token budget limit (${e.limit} tokens) reached for provider '${e.providerName}'. Recovers automatically tomorrow."
     is ModelError.ProactiveBudgetExceeded -> "Proactive features reached daily budget limit. Recovers tomorrow."
     is ModelError.ModelNotFound -> {
         val check = if (e.model.isEmpty()) "Please check the model name and Base URL in Settings › Model."
             else "Check the model name in Settings › Model (enter the full model ID, e.g. gemini-flash-latest) or switch to a preset."
         when {
             e.detail.isNotEmpty() ->
-                (if (e.model.isEmpty()) "" else "When calling model "${e.model}", ") +
+                (if (e.model.isEmpty()) "" else "When calling model '${e.model}', ") +
                     "server responded: ${quoted(e.detail)}. The model name may be incorrect or the service is temporarily unavailable. $check"
             e.model.isEmpty() -> "Model not found. $check"
-            else -> "Model "${e.model}" does not exist at this provider. $check"
+            else -> "Model '${e.model}' does not exist at this provider. $check"
         }
     }
     is ModelError.ModelNotAvailable ->
-        "Account is not authorized or activated for model "${e.model.ifEmpty { "current model" }}". Switch models in Settings › Model or activate it in your provider dashboard."
+        "Account is not authorized or activated for model '${e.model.ifEmpty { "current model" }}'. Switch models in Settings › Model or activate it in your provider dashboard."
     is ModelError.ToolsUnsupported ->
-        "Model "${e.model.ifEmpty { "current model" }}" does not support tool calling. Mika requires tool support. Switch to a model with tool calling in Settings › Model."
+        "Model '${e.model.ifEmpty { "current model" }}' does not support tool calling. Mika requires tool support. Switch to a model with tool calling in Settings › Model."
     is ModelError.ContextTooLong -> "Conversation exceeded model context length. Switch to a larger context model or break task into smaller steps."
     is ModelError.ContentRefused -> "Model refused to process this content. Adjust prompt or switch models."
     is ModelError.ReasoningEffortRejected ->
@@ -103,7 +103,7 @@ internal fun userReason(e: ModelError): String = when (e) {
         "Your ${e.account} subscription plan cannot use this endpoint (HTTP 403). ${if (e.detail.isEmpty()) "" else "Server info: ${quoted(e.detail)}. "}Use an API key or switch models."
     is ModelError.ChainFailed -> {
         val trail = e.entries.joinToString("; ") { (name, err) ->
-            ""$name"${chainErrorTag(err)}: ${err.message.orEmpty().lineSequence().firstOrNull().orEmpty().take(80)}"
+            "'${name}'${chainErrorTag(err)}: ${err.message.orEmpty().lineSequence().firstOrNull().orEmpty().take(80)}"
         }
         userReason(e.primary) + " All failover models attempted and failed: $trail."
     }
